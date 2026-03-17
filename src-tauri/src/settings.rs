@@ -75,17 +75,31 @@ fn settings_path() -> PathBuf {
 }
 
 impl Settings {
-    /// Load settings from disk, or return defaults
+    /// Load settings from disk, or return defaults.
+    /// API keys missing from settings are filled from .env if present.
     pub fn load() -> Self {
+        // Load .env from the project root (next to src-tauri/)
+        let _ = dotenvy::dotenv();
+
         let path = settings_path();
-        if path.exists() {
+        let mut s = if path.exists() {
             match fs::read_to_string(&path) {
                 Ok(content) => serde_json::from_str(&content).unwrap_or_default(),
                 Err(_) => Self::default(),
             }
         } else {
             Self::default()
+        };
+
+        // Fill empty keys from environment variables
+        if s.soniox_api_key.is_empty() {
+            if let Ok(v) = std::env::var("SONIOX_API_KEY") { s.soniox_api_key = v; }
         }
+        if s.elevenlabs_api_key.is_empty() {
+            if let Ok(v) = std::env::var("ELEVENLABS_API_KEY") { s.elevenlabs_api_key = v; }
+        }
+
+        s
     }
 
     /// Save settings to disk

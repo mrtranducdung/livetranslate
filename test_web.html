@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Live Translator</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Segoe UI', sans-serif; background: #0f0f13; color: #e0e0e0; min-height: 100vh; padding: 24px; }
+    h1 { font-size: 20px; font-weight: 600; margin-bottom: 20px; color: #fff; }
+
+    .lang-row { display: flex; gap: 12px; margin-bottom: 20px; align-items: center; flex-wrap: wrap; }
+    .lang-row select { background: #1e1e2a; border: 1px solid #333; border-radius: 8px; padding: 8px 12px; color: #e0e0e0; font-size: 13px; outline: none; }
+    .lang-row label { font-size: 13px; color: #888; }
+
+    .tabs { display: flex; gap: 8px; margin-bottom: 20px; }
+    .tab-btn { padding: 8px 18px; border-radius: 8px; border: 1px solid #333; background: #1e1e2a; color: #888; cursor: pointer; font-size: 13px; }
+    .tab-btn.active { background: #6c63ff; border-color: #6c63ff; color: #fff; }
+
+    .panel { display: none; }
+    .panel.active { display: block; }
+
+    video { width: 100%; max-height: 320px; border-radius: 12px; background: #000; margin-bottom: 16px; }
+    .upload-area { border: 2px dashed #333; border-radius: 12px; padding: 40px; text-align: center; cursor: pointer; margin-bottom: 16px; }
+    .upload-area:hover { border-color: #6c63ff; }
+    .upload-area p { color: #666; font-size: 14px; }
+
+    .mic-area { display: flex; flex-direction: column; align-items: center; gap: 16px; padding: 32px 0; }
+
+    .avatar-wrap { display: flex; justify-content: center; margin-bottom: 16px; }
+    .avatar { width: 72px; height: 72px; border-radius: 50%; background: #1e1e2a; border: 2px solid #333; display: flex; align-items: center; justify-content: center; transition: border-color 0.2s; }
+    .avatar.speaking { border-color: #6c63ff; animation: pulse 0.6s ease-in-out infinite alternate; }
+    @keyframes pulse { from { box-shadow: 0 0 0 0 rgba(108,99,255,0.4); } to { box-shadow: 0 0 0 12px rgba(108,99,255,0); } }
+    .bars { display: flex; align-items: flex-end; gap: 3px; height: 24px; opacity: 0; transition: opacity 0.2s; }
+    .avatar.speaking .bars { opacity: 1; }
+    .avatar.speaking .bars .bar { animation: bounce var(--d) ease-in-out infinite alternate; }
+    .bar { width: 4px; background: #6c63ff; border-radius: 2px; height: 6px; }
+    .bar:nth-child(1){--d:0.4s} .bar:nth-child(2){--d:0.5s} .bar:nth-child(3){--d:0.35s} .bar:nth-child(4){--d:0.45s} .bar:nth-child(5){--d:0.38s}
+    @keyframes bounce { from { height: 4px; } to { height: 20px; } }
+
+    .controls { display: flex; gap: 10px; justify-content: center; margin-bottom: 16px; }
+    .btn { padding: 9px 22px; border-radius: 8px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; }
+    .btn:disabled { opacity: 0.4; cursor: default; }
+    .btn-primary { background: #6c63ff; color: #fff; }
+    .btn-danger  { background: #e05252; color: #fff; }
+
+    .transcript-box { background: #1e1e2a; border: 1px solid #2a2a3a; border-radius: 12px; padding: 16px; min-height: 120px; max-height: 300px; overflow-y: auto; }
+    .segment { margin-bottom: 12px; }
+    .seg-original { font-size: 12px; color: #666; margin-bottom: 2px; }
+    .seg-translation { font-size: 14px; color: #e0e0e0; }
+    .status { text-align: center; font-size: 12px; color: #666; margin-bottom: 8px; min-height: 18px; }
+    .status.active { color: #6c63ff; }
+    .status.error  { color: #e05252; }
+  </style>
+</head>
+<body>
+
+<h1>🌐 Live Translator</h1>
+
+<div class="lang-row">
+  <label>Source:</label>
+  <select id="sel-source">
+    <option value="auto">Auto-detect</option>
+    <option value="en">English</option>
+    <option value="ja">Japanese</option>
+    <option value="ko">Korean</option>
+    <option value="zh">Chinese</option>
+    <option value="vi">Vietnamese</option>
+    <option value="fr">French</option>
+    <option value="de">German</option>
+  </select>
+  <label>→ Target:</label>
+  <select id="sel-target">
+    <option value="vi">Vietnamese</option>
+    <option value="en">English</option>
+    <option value="ja">Japanese</option>
+    <option value="ko">Korean</option>
+    <option value="zh">Chinese</option>
+  </select>
+</div>
+
+<div class="tabs">
+  <button class="tab-btn active" data-tab="video">📹 Video File</button>
+  <button class="tab-btn" data-tab="mic">🎤 Microphone</button>
+</div>
+
+<div class="panel active" id="panel-video">
+  <div class="upload-area" id="drop-zone">
+    <p>Click or drop a video/audio file here</p>
+    <input type="file" id="file-input" accept="video/*,audio/*" style="display:none" />
+  </div>
+  <div id="video-wrap"></div>
+  <div class="controls">
+    <button class="btn btn-primary" id="btn-start-video" disabled>▶ Start Translating</button>
+    <button class="btn btn-danger"  id="btn-stop-video"  disabled>■ Stop</button>
+    <button class="btn btn-secondary" id="btn-load-another" style="display:none;background:#1e1e2a;color:#e0e0e0;border:1px solid #333;">📂 Load another</button>
+  </div>
+</div>
+
+<div class="panel" id="panel-mic">
+  <div class="mic-area">
+    <div class="controls">
+      <button class="btn btn-primary" id="btn-start-mic">🎤 Start</button>
+      <button class="btn btn-danger"  id="btn-stop-mic" disabled>■ Stop</button>
+    </div>
+  </div>
+</div>
+
+<div class="avatar-wrap">
+  <div class="avatar" id="avatar">
+    <div class="bars">
+      <div class="bar"></div><div class="bar"></div><div class="bar"></div>
+      <div class="bar"></div><div class="bar"></div>
+    </div>
+  </div>
+</div>
+<div class="status" id="status-text">Ready</div>
+<div class="transcript-box" id="transcript"></div>
+
+<script>
+const SAMPLE_RATE = 16000;
+
+let audioCtx = null, processor = null, mediaSource = null, active = false, socket = null, provisionalEl = null;
+
+// Tabs
+document.querySelectorAll('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+    document.querySelectorAll('.panel').forEach(p => p.classList.remove('active'));
+    btn.classList.add('active');
+    document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
+  });
+});
+
+// Video
+const dropZone  = document.getElementById('drop-zone');
+const fileInput = document.getElementById('file-input');
+const videoWrap = document.getElementById('video-wrap');
+const btnStartVideo = document.getElementById('btn-start-video');
+const btnStopVideo  = document.getElementById('btn-stop-video');
+let videoEl = null;
+
+dropZone.addEventListener('click', () => fileInput.click());
+dropZone.addEventListener('dragover', e => { e.preventDefault(); dropZone.style.borderColor = '#6c63ff'; });
+dropZone.addEventListener('dragleave', () => { dropZone.style.borderColor = '#333'; });
+dropZone.addEventListener('drop', e => { e.preventDefault(); dropZone.style.borderColor = '#333'; loadFile(e.dataTransfer.files[0]); });
+fileInput.addEventListener('change', () => loadFile(fileInput.files[0]));
+
+function loadFile(file) {
+  if (!file) return;
+  stopCapture();
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  mediaSource = null;
+  // Fresh video element each load — avoids "already connected" error
+  if (videoEl) { videoEl.pause(); videoEl.remove(); }
+  videoEl = document.createElement('video');
+  videoEl.controls = true;
+  videoEl.style.cssText = 'width:100%;max-height:320px;border-radius:12px;background:#000;margin-bottom:16px;';
+  videoEl.src = URL.createObjectURL(file);
+  videoWrap.appendChild(videoEl);
+  dropZone.style.display = 'none';
+  btnStartVideo.disabled = false;
+  setStatus('File loaded — press Start');
+}
+
+btnStartVideo.addEventListener('click', async () => {
+  try {
+    await videoEl.play();
+    startCapture(videoEl, null);
+    btnStartVideo.disabled = true;
+    btnStopVideo.disabled = false;
+  } catch (e) { setStatus('Error: ' + e.message, 'error'); }
+});
+
+btnStopVideo.addEventListener('click', () => {
+  stopCapture();
+  videoEl.pause();
+  btnStartVideo.disabled = false;
+  btnStopVideo.disabled = true;
+  document.getElementById('btn-load-another').style.display = '';
+});
+
+document.getElementById('btn-load-another').addEventListener('click', () => {
+  stopCapture();
+  if (audioCtx) { audioCtx.close(); audioCtx = null; }
+  mediaSource = null;
+  if (videoEl) { videoEl.pause(); videoEl.remove(); videoEl = null; }
+  dropZone.style.display = '';
+  fileInput.value = '';
+  btnStartVideo.disabled = true;
+  btnStopVideo.disabled = true;
+  document.getElementById('btn-load-another').style.display = 'none';
+  document.getElementById('transcript').innerHTML = '';
+  setStatus('Ready');
+});
+
+// Mic
+const btnStartMic = document.getElementById('btn-start-mic');
+const btnStopMic  = document.getElementById('btn-stop-mic');
+
+btnStartMic.addEventListener('click', async () => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+    startCapture(null, stream);
+    btnStartMic.disabled = true;
+    btnStopMic.disabled = false;
+  } catch (e) { setStatus('Mic error: ' + e.message, 'error'); }
+});
+
+btnStopMic.addEventListener('click', () => {
+  stopCapture();
+  btnStartMic.disabled = false;
+  btnStopMic.disabled = true;
+});
+
+// Audio capture
+function startCapture(mediaEl, stream) {
+  active = true;
+
+  // Reuse existing AudioContext if available (same file, stop→start again)
+  if (!audioCtx) audioCtx = new AudioContext({ sampleRate: SAMPLE_RATE });
+  audioCtx.resume();
+
+  let source;
+  if (stream) {
+    source = audioCtx.createMediaStreamSource(stream);
+  } else {
+    // createMediaElementSource can only be called once per element — reuse if exists
+    if (!mediaSource) mediaSource = audioCtx.createMediaElementSource(mediaEl);
+    source = mediaSource;
+  }
+
+  processor = audioCtx.createScriptProcessor(4096, 1, 1);
+  source.connect(processor);
+  processor.connect(audioCtx.destination);
+
+  processor.onaudioprocess = (e) => {
+    if (!active || !socket || socket.readyState !== WebSocket.OPEN) return;
+    const float32 = e.inputBuffer.getChannelData(0);
+    const int16 = new Int16Array(float32.length);
+    for (let i = 0; i < float32.length; i++) {
+      int16[i] = Math.max(-32768, Math.min(32767, float32[i] * 32768));
+    }
+    socket.send(int16.buffer);
+  };
+
+  setStatus('Connecting...', 'active');
+  connectSoniox();
+}
+
+function stopCapture() {
+  active = false;
+  if (socket) { try { socket.send(JSON.stringify({ type: 'stop' })); } catch(_){} socket.close(); socket = null; }
+  if (processor) { processor.disconnect(); processor = null; }
+  // Keep audioCtx + mediaSource alive so Start can be clicked again on the same file
+  setStatus('Stopped');
+}
+
+// WebSocket
+function connectSoniox() {
+  const src = document.getElementById('sel-source').value;
+  const tgt = document.getElementById('sel-target').value;
+
+  socket = new WebSocket(`ws://${location.host}/ws/translate`);
+  socket.binaryType = 'arraybuffer';
+
+  socket.onopen = () => {
+    socket.send(JSON.stringify({ source_language: src, target_language: tgt }));
+    setStatus('Listening...', 'active');
+  };
+
+  socket.onmessage = async (e) => {
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'error') { setStatus('Error: ' + data.message, 'error'); return; }
+      if (data.provisional) setProvisional(data.provisional);
+      if (data.original)    clearProvisional();
+
+      const src = document.getElementById('sel-source').value;
+      const tgt = document.getElementById('sel-target').value;
+      const sameLanguage = src !== 'auto' && src === tgt;
+      const textToSpeak = data.translation || (sameLanguage ? data.original : null);
+
+      if (data.original || data.translation) {
+        addSegment(data.original || '', data.translation || data.original || '');
+      }
+      if (textToSpeak) {
+        setStatus('Speaking...', 'active');
+        await speak(textToSpeak);
+        setStatus('Listening...', 'active');
+      }
+    } catch (err) { console.error('[onmessage]', err); }
+  };
+
+  socket.onerror = () => setStatus('WebSocket error', 'error');
+  socket.onclose = (e) => { if (active) setStatus('Disconnected', 'error'); };
+}
+
+// TTS
+async function speak(text) {
+  const avatar = document.getElementById('avatar');
+  try {
+    const form = new FormData();
+    form.append('text', text);
+    const res = await fetch('/api/tts', { method: 'POST', body: form });
+    if (!res.ok) return;
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const audio = new Audio(url);
+    avatar.classList.add('speaking');
+    await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; audio.play(); });
+    avatar.classList.remove('speaking');
+    URL.revokeObjectURL(url);
+  } catch (e) { avatar.classList.remove('speaking'); }
+}
+
+function setProvisional(text) {
+  const box = document.getElementById('transcript');
+  if (!provisionalEl) {
+    provisionalEl = document.createElement('div');
+    provisionalEl.className = 'seg-original';
+    provisionalEl.style.fontStyle = 'italic';
+    box.appendChild(provisionalEl);
+  }
+  provisionalEl.textContent = text;
+  box.scrollTop = box.scrollHeight;
+}
+function clearProvisional() { if (provisionalEl) { provisionalEl.remove(); provisionalEl = null; } }
+function addSegment(original, translation) {
+  const box = document.getElementById('transcript');
+  const div = document.createElement('div');
+  div.className = 'segment';
+  div.innerHTML = `<div class="seg-original">${esc(original)}</div><div class="seg-translation">${esc(translation)}</div>`;
+  box.appendChild(div);
+  box.scrollTop = box.scrollHeight;
+}
+function esc(s) { return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function setStatus(msg, type = '') {
+  const el = document.getElementById('status-text');
+  el.textContent = msg;
+  el.className = 'status ' + type;
+}
+</script>
+</body>
+</html>

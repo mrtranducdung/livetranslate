@@ -183,9 +183,11 @@
           <select id="select-translation-mode">
             <option value="soniox">☁️ Soniox API (Cloud)</option>
             <option value="local">🖥️ Local MLX (Offline)</option>
+            <option value="elevenlabs">🤖 ElevenLabs + Mistral</option>
           </select>
           <p class="hint" id="hint-mode-soniox">Real-time, 70+ languages, ~$0.12/hr</p>
           <p class="hint" id="hint-mode-local" style="display:none">Offline, free, ~3-4s delay</p>
+          <p class="hint" id="hint-mode-elevenlabs" style="display:none">ElevenLabs Scribe STT + Mistral translation, ~5s delay</p>
         </div>
 
         <div class="settings-section" id="section-api-key">
@@ -199,6 +201,32 @@
             </button>
           </div>
           <p class="hint">Get key at <a href="#" id="link-soniox">console.soniox.com</a></p>
+        </div>
+
+        <div class="settings-section" id="section-elevenlabs-stt-key" style="display:none">
+          <span class="field-label">ElevenLabs API Key <span class="required-badge">Required</span></span>
+          <div class="input-group">
+            <input type="password" id="input-elevenlabs-stt-key" placeholder="Enter your ElevenLabs API key..." autocomplete="off" />
+            <button id="btn-toggle-elevenlabs-stt-key" class="icon-btn small" title="Show/Hide">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <p class="hint">Needs <code>speech_to_text</code> permission — <a href="#" id="link-elevenlabs-stt">elevenlabs.io</a></p>
+        </div>
+
+        <div class="settings-section" id="section-mistral-key" style="display:none">
+          <span class="field-label">Mistral API Key <span class="required-badge">Required</span></span>
+          <div class="input-group">
+            <input type="password" id="input-mistral-key" placeholder="Enter your Mistral API key..." autocomplete="off" />
+            <button id="btn-toggle-mistral-key" class="icon-btn small" title="Show/Hide">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" /><circle cx="12" cy="12" r="3" />
+              </svg>
+            </button>
+          </div>
+          <p class="hint">Get key at <a href="#" id="link-mistral">console.mistral.ai</a></p>
         </div>
 
         <div class="settings-section">
@@ -423,6 +451,8 @@
   <script type="module" src="/js/ui.js"></script>
   <script type="module" src="/js/soniox.js"></script>
   <script type="module" src="/js/elevenlabs-tts.js"></script>
+  <script type="module" src="/js/elevenlabs-stt.js"></script>
+  <script type="module" src="/js/mistral-translate.js"></script>
   <script type="module" src="/js/audio-player.js"></script>
   <script type="module" src="/js/app.js"></script>
 </body>

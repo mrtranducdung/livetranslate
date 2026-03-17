@@ -7,6 +7,8 @@ import { settingsManager } from './settings.js';
 import { TranscriptUI } from './ui.js';
 import { sonioxClient } from './soniox.js';
 import { elevenLabsTTS } from './elevenlabs-tts.js';
+import { elevenLabsSTT } from './elevenlabs-stt.js';
+import { mistralTranslate } from './mistral-translate.js';
 import { webSpeechTTS } from './web-speech-tts.js';
 import { edgeTTSRust } from './edge-tts.js';
 import { audioPlayer } from './audio-player.js';
@@ -240,6 +242,28 @@ class App {
             window.__TAURI__.opener.openUrl('https://elevenlabs.io/app/sign-up');
         });
 
+        // ElevenLabs STT key toggle
+        document.getElementById('btn-toggle-elevenlabs-stt-key')?.addEventListener('click', () => {
+            const input = document.getElementById('input-elevenlabs-stt-key');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        });
+
+        // Mistral key toggle
+        document.getElementById('btn-toggle-mistral-key')?.addEventListener('click', () => {
+            const input = document.getElementById('input-mistral-key');
+            input.type = input.type === 'password' ? 'text' : 'password';
+        });
+
+        // External links for new keys
+        document.getElementById('link-elevenlabs-stt')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.__TAURI__.opener.openUrl('https://elevenlabs.io/app/sign-up');
+        });
+        document.getElementById('link-mistral')?.addEventListener('click', (e) => {
+            e.preventDefault();
+            window.__TAURI__.opener.openUrl('https://console.mistral.ai/');
+        });
+
         // Save settings — both top and bottom buttons
         document.getElementById('btn-save-settings').addEventListener('click', () => {
             this._saveSettingsFromForm();
@@ -329,6 +353,28 @@ class App {
         };
 
         sonioxClient.onError = (error) => {
+            this._showToast(error, 'error');
+        };
+
+        // Wire ElevenLabs STT + Mistral callbacks
+        elevenLabsSTT.onTranscript = async (text) => {
+            this.transcriptUI.addOriginal(text, null);
+            const s = settingsManager.get();
+            const translation = await mistralTranslate.translate(text, s.source_language, s.target_language);
+            if (translation) {
+                this.transcriptUI.addTranslation(translation);
+                this._speakIfEnabled(translation);
+            }
+        };
+
+        elevenLabsSTT.onStatusChange = (status) => {
+            if (this.translationMode === 'elevenlabs') {
+                this._updateStatus(status);
+            }
+        };
+
+        elevenLabsSTT.onError = (error) => {
+            console.error('[ElevenLabsSTT]', error);
             this._showToast(error, 'error');
         };
     }
@@ -441,6 +487,8 @@ class App {
         const s = settingsManager.get();
 
         document.getElementById('input-api-key').value = s.soniox_api_key || '';
+        document.getElementById('input-elevenlabs-stt-key').value = s.elevenlabs_api_key || '';
+        document.getElementById('input-mistral-key').value = s.mistral_api_key || '';
         document.getElementById('select-source-lang').value = s.source_language || 'auto';
         document.getElementById('select-target-lang').value = s.target_language || 'vi';
         document.getElementById('select-translation-mode').value = s.translation_mode || 'soniox';
@@ -526,7 +574,9 @@ class App {
         // TTS settings
         const ttsEnabled = document.getElementById('check-tts-enabled')?.checked || false;
         settings.tts_provider = document.getElementById('select-tts-provider')?.value || 'webspeech';
-        settings.elevenlabs_api_key = document.getElementById('input-elevenlabs-key').value.trim();
+        settings.elevenlabs_api_key = document.getElementById('input-elevenlabs-key').value.trim()
+            || document.getElementById('input-elevenlabs-stt-key').value.trim();
+        settings.mistral_api_key = document.getElementById('input-mistral-key').value.trim();
         settings.tts_voice_id = document.getElementById('select-tts-voice').value;
         settings.edge_tts_voice = document.getElementById('select-edge-voice')?.value || 'vi-VN-HoaiMyNeural';
         settings.edge_tts_speed = parseInt(document.getElementById('range-edge-speed')?.value || 20);
@@ -690,9 +740,18 @@ class App {
     _updateModeUI(mode) {
         const hintSoniox = document.getElementById('hint-mode-soniox');
         const hintLocal = document.getElementById('hint-mode-local');
+        const hintEL = document.getElementById('hint-mode-elevenlabs');
+        const sectionApiKey = document.getElementById('section-api-key');
+        const sectionELSttKey = document.getElementById('section-elevenlabs-stt-key');
+        const sectionMistralKey = document.getElementById('section-mistral-key');
 
         if (hintSoniox) hintSoniox.style.display = mode === 'soniox' ? '' : 'none';
         if (hintLocal) hintLocal.style.display = mode === 'local' ? '' : 'none';
+        if (hintEL) hintEL.style.display = mode === 'elevenlabs' ? '' : 'none';
+
+        if (sectionApiKey) sectionApiKey.style.display = mode === 'elevenlabs' ? 'none' : '';
+        if (sectionELSttKey) sectionELSttKey.style.display = mode === 'elevenlabs' ? '' : 'none';
+        if (sectionMistralKey) sectionMistralKey.style.display = mode === 'elevenlabs' ? '' : 'none';
     }
 
     // ─── Start/Stop ────────────────────────────────────────
@@ -702,8 +761,19 @@ class App {
         this.translationMode = settings.translation_mode || 'soniox';
         console.log('[App] start() called, translation_mode:', this.translationMode, 'settings:', JSON.stringify(settings));
 
-        // Always check Soniox API key (required for all modes)
-        if (!settings.soniox_api_key) {
+        // Validate required API keys based on mode
+        if (this.translationMode === 'elevenlabs') {
+            if (!settings.elevenlabs_api_key) {
+                this._showToast('ElevenLabs API key is required. Add it in Settings.', 'error');
+                this._showView('settings');
+                return;
+            }
+            if (!settings.mistral_api_key) {
+                this._showToast('Mistral API key is required. Add it in Settings.', 'error');
+                this._showView('settings');
+                return;
+            }
+        } else if (!settings.soniox_api_key) {
             this._showToast('Soniox API key is required. Add it in Settings.', 'error');
             this._showView('settings');
             return;
@@ -729,6 +799,8 @@ class App {
 
         if (this.translationMode === 'local') {
             await this._startLocalMode(settings);
+        } else if (this.translationMode === 'elevenlabs') {
+            await this._startElevenLabsMode(settings);
         } else {
             await this._startSonioxMode(settings);
         }
@@ -774,6 +846,32 @@ class App {
                 channel: channel,
             });
             console.log('[App] Audio capture started successfully');
+        } catch (err) {
+            console.error('Failed to start audio capture:', err);
+            this._showToast(`Audio error: ${err}`, 'error');
+            await this.stop();
+        }
+    }
+
+    async _startElevenLabsMode(settings) {
+        console.log('[App] Starting ElevenLabs + Mistral mode...');
+        this._updateStatus('connecting');
+
+        elevenLabsSTT.configure({ apiKey: settings.elevenlabs_api_key });
+        mistralTranslate.configure({ apiKey: settings.mistral_api_key });
+        elevenLabsSTT.start();
+
+        try {
+            const channel = new window.__TAURI__.core.Channel();
+            channel.onmessage = (pcmData) => {
+                elevenLabsSTT.feedAudio(new Uint8Array(pcmData));
+            };
+
+            await invoke('start_capture', {
+                source: this.currentSource,
+                channel: channel,
+            });
+            console.log('[App] ElevenLabs mode: audio capture started');
         } catch (err) {
             console.error('Failed to start audio capture:', err);
             this._showToast(`Audio error: ${err}`, 'error');
@@ -1062,6 +1160,8 @@ class App {
             this.localPipelineReady = false;
             this.transcriptUI.removeStatusMessage();
             this._updateStatus('disconnected');
+        } else if (this.translationMode === 'elevenlabs') {
+            elevenLabsSTT.stop();
         } else {
             // Disconnect Soniox
             sonioxClient.disconnect();
@@ -1110,7 +1210,9 @@ class App {
         const targetLang = document.getElementById('select-target-lang')?.value || 'vi';
 
         const content = this.transcriptUI.getFormattedContent({
-            model: this.translationMode === 'soniox' ? 'Soniox Cloud API' : 'Local MLX Whisper',
+            model: this.translationMode === 'soniox' ? 'Soniox Cloud API'
+                : this.translationMode === 'elevenlabs' ? 'ElevenLabs Scribe + Mistral'
+                : 'Local MLX Whisper',
             sourceLang,
             targetLang,
             duration,
