@@ -18,10 +18,23 @@ import httpx
 
 load_dotenv()
 
-SONIOX_KEY  = os.getenv("SONIOX_API_KEY", "")
-EL_KEY      = os.getenv("ELEVENLABS_API_KEY", "")
-EL_VOICE_ID = os.getenv("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
-SONIOX_URL  = "wss://stt-rt.soniox.com/transcribe-websocket"
+SONIOX_KEY     = os.getenv("SONIOX_API_KEY", "")
+EL_KEY         = os.getenv("ELEVENLABS_API_KEY", "")
+EL_VOICE_DEFAULT = os.getenv("ELEVENLABS_VOICE_ID", "JBFqnCBsd6RMkjVDRZzb")
+SONIOX_URL     = "wss://stt-rt.soniox.com/transcribe-websocket"
+
+# Per-language voice map — falls back to default if not set
+EL_VOICE_MAP = {}
+for lang in ["en", "vi", "ja", "ko", "zh", "fr", "de"]:
+    v = os.getenv(f"ELEVENLABS_VOICE_{lang.upper()}", "")
+    EL_VOICE_MAP[lang] = v if v else None
+
+def get_voice_id(target_lang: str) -> str:
+    vid = EL_VOICE_MAP.get(target_lang)
+    if vid:
+        return vid
+    print(f"[TTS] warning: no voice ID for lang={target_lang!r}, using default")
+    return EL_VOICE_DEFAULT
 
 app = FastAPI()
 app.add_middleware(CORSMiddleware, allow_origins=["*"], allow_methods=["*"], allow_headers=["*"])
@@ -137,14 +150,14 @@ async def ws_translate(ws: WebSocket):
 
 
 @app.post("/api/tts")
-async def tts(text: str = Form(...), voice_id: str = Form(None)):
-    vid = voice_id or EL_VOICE_ID
-    print(f"[TTS] {text[:60]!r}")
+async def tts(text: str = Form(...), lang: str = Form(None), voice_id: str = Form(None)):
+    vid = voice_id or get_voice_id(lang or "en")
+    print(f"[TTS] lang={lang!r} voice={vid!r} text={text[:60]!r}")
     async with httpx.AsyncClient(timeout=30) as client:
         res = await client.post(
             f"https://api.elevenlabs.io/v1/text-to-speech/{vid}",
             headers={"xi-api-key": EL_KEY, "Content-Type": "application/json"},
-            json={"text": text, "model_id": "eleven_multilingual_v2", "output_format": "mp3_44100_128"},
+            json={"text": text, "model_id": "eleven_turbo_v2_5", "output_format": "mp3_44100_128"},
         )
     if res.status_code != 200:
         print(f"[TTS] error {res.status_code}: {res.text[:200]}")

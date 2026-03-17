@@ -287,7 +287,7 @@ function connectSoniox() {
       }
       if (textToSpeak) {
         setStatus('Speaking...', 'active');
-        await speak(textToSpeak);
+        await speak(textToSpeak, tgt);
         setStatus('Listening...', 'active');
       }
     } catch (err) { console.error('[onmessage]', err); }
@@ -298,11 +298,12 @@ function connectSoniox() {
 }
 
 // TTS
-async function speak(text) {
+async function speak(text, lang) {
   const avatar = document.getElementById('avatar');
   try {
     const form = new FormData();
     form.append('text', text);
+    if (lang) form.append('lang', lang);
     const res = await fetch('/api/tts', { method: 'POST', body: form });
     if (!res.ok) return;
     const blob = await res.blob();
