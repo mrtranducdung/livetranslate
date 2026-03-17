@@ -261,7 +261,8 @@ function connectSoniox() {
   const src = document.getElementById('sel-source').value;
   const tgt = document.getElementById('sel-target').value;
 
-  socket = new WebSocket(`ws://${location.host}/ws/translate`);
+  const wsProto = location.protocol === 'https:' ? 'wss' : 'ws';
+  socket = new WebSocket(`${wsProto}://${location.host}/ws/translate`);
   socket.binaryType = 'arraybuffer';
 
   socket.onopen = () => {
