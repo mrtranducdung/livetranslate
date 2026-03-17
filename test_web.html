@@ -69,7 +69,8 @@
     <option value="fr">French</option>
     <option value="de">German</option>
   </select>
-  <label>→ Target:</label>
+  <button id="btn-swap" title="Switch direction" style="background:#1e1e2a;border:1px solid #333;border-radius:8px;padding:6px 12px;color:#e0e0e0;cursor:pointer;font-size:16px;">⇄</button>
+  <label>Target:</label>
   <select id="sel-target">
     <option value="vi">Vietnamese</option>
     <option value="en">English</option>
@@ -130,6 +131,22 @@ document.querySelectorAll('.tab-btn').forEach(btn => {
     btn.classList.add('active');
     document.getElementById('panel-' + btn.dataset.tab).classList.add('active');
   });
+});
+
+// Swap source ↔ target, reconnect if active
+document.getElementById('btn-swap').addEventListener('click', () => {
+  const src = document.getElementById('sel-source');
+  const tgt = document.getElementById('sel-target');
+  const tmp = src.value;
+  src.value = tgt.value;
+  tgt.value = tmp === 'auto' ? 'en' : tmp;  // auto can't be a target
+
+  // Reconnect with new direction if currently active
+  if (active && socket) {
+    socket.close();
+    socket = null;
+    connectSoniox();
+  }
 });
 
 // Video
