@@ -122,6 +122,7 @@
 const SAMPLE_RATE = 16000;
 
 let audioCtx = null, processor = null, mediaSource = null, active = false, speaking = false, socket = null, provisionalEl = null;
+let ttsQueue = [], ttsRunning = false;
 
 // Tabs
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -267,6 +268,7 @@ function startCapture(mediaEl, stream) {
 
 function stopCapture() {
   active = false;
+  ttsQueue = [];
   if (socket) { try { socket.send(JSON.stringify({ type: 'stop' })); } catch(_){} socket.close(); socket = null; }
   if (processor) { processor.disconnect(); processor = null; }
   // Keep audioCtx + mediaSource alive so Start can be clicked again on the same file
@@ -303,9 +305,7 @@ function connectSoniox() {
         addSegment(data.original || '', data.translation || data.original || '');
       }
       if (textToSpeak) {
-        setStatus('Speaking...', 'active');
-        await speak(textToSpeak, tgt);
-        setStatus('Listening...', 'active');
+        enqueueTTS(textToSpeak, tgt);
       }
     } catch (err) { console.error('[onmessage]', err); }
   };
@@ -314,7 +314,23 @@ function connectSoniox() {
   socket.onclose = (e) => { if (active) setStatus('Disconnected', 'error'); };
 }
 
-// TTS
+// TTS queue — plays segments one by one without overlap
+function enqueueTTS(text, lang) {
+  ttsQueue.push({ text, lang });
+  if (!ttsRunning) processTTSQueue();
+}
+
+async function processTTSQueue() {
+  ttsRunning = true;
+  while (ttsQueue.length > 0) {
+    const { text, lang } = ttsQueue.shift();
+    setStatus('Speaking...', 'active');
+    await speak(text, lang);
+    setStatus(active ? 'Listening...' : 'Done', active ? 'active' : '');
+  }
+  ttsRunning = false;
+}
+
 async function speak(text, lang) {
   const avatar = document.getElementById('avatar');
   speaking = true;
