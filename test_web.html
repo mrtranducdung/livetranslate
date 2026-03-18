@@ -121,7 +121,7 @@
 <script>
 const SAMPLE_RATE = 16000;
 
-let audioCtx = null, processor = null, mediaSource = null, active = false, socket = null, provisionalEl = null;
+let audioCtx = null, processor = null, mediaSource = null, active = false, speaking = false, socket = null, provisionalEl = null;
 
 // Tabs
 document.querySelectorAll('.tab-btn').forEach(btn => {
@@ -252,7 +252,7 @@ function startCapture(mediaEl, stream) {
   processor.connect(audioCtx.destination);
 
   processor.onaudioprocess = (e) => {
-    if (!active || !socket || socket.readyState !== WebSocket.OPEN) return;
+    if (!active || speaking || !socket || socket.readyState !== WebSocket.OPEN) return;
     const float32 = e.inputBuffer.getChannelData(0);
     const int16 = new Int16Array(float32.length);
     for (let i = 0; i < float32.length; i++) {
@@ -317,6 +317,7 @@ function connectSoniox() {
 // TTS
 async function speak(text, lang) {
   const avatar = document.getElementById('avatar');
+  speaking = true;
   try {
     const form = new FormData();
     form.append('text', text);
@@ -330,7 +331,11 @@ async function speak(text, lang) {
     await new Promise(resolve => { audio.onended = resolve; audio.onerror = resolve; audio.play(); });
     avatar.classList.remove('speaking');
     URL.revokeObjectURL(url);
-  } catch (e) { avatar.classList.remove('speaking'); }
+  } catch (e) {
+    avatar.classList.remove('speaking');
+  } finally {
+    speaking = false;
+  }
 }
 
 function setProvisional(text) {
